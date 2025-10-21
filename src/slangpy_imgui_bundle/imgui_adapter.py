@@ -318,8 +318,8 @@ class ImguiAdapter:
             elif event.button == spy.MouseButton.middle:
                 self.io.mouse_down[2] = down
         if event.is_scroll():
-            self.io.mouse_wheel += event.scroll.y
-            self.io.mouse_wheel_h += event.scroll.x
+            self.io.mouse_wheel += event.scroll.y / 4
+            self.io.mouse_wheel_h += event.scroll.x / 4
 
     def unicode_input(self, codepoint: int) -> None:
         """Method to handle unicode character input.
