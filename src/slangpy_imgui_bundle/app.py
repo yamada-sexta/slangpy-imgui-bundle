@@ -37,6 +37,9 @@ class App:
 
         # Setup renderer.
         imgui.create_context()
+        self.io = imgui.get_io()
+        self.io.set_ini_filename("")
+        self.io.set_log_filename("")
         self.adapter = ImguiAdapter(self.window, self.device)
 
         self.window.on_resize = self.on_resize

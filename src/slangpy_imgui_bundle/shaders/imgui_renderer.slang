@@ -14,26 +14,32 @@ struct VertexInput
     float4 col : COLOR0;
 };
 
-struct PixelInput
+struct FragmentInput
 {
-    float4 pos : SV_POSITION;
     float2 uv;
     float4 col;
 };
 
-[shader("vertex")]
-PixelInput vertexMain(VertexInput vIn)
+struct VertexOutput
 {
-    PixelInput vOut;
+    float4 pos : SV_Position;
+    FragmentInput frag : FragmentInput;
+};
+
+[shader("vertex")]
+VertexOutput vertexMain(VertexInput vIn)
+{
+    VertexOutput vOut;
     vOut.pos = mul(uniforms.proj, float4(vIn.pos.xy, 0.0, 1.0));
-    vOut.col = vIn.col;
-    vOut.uv = vIn.uv;
+    vOut.frag.col = vIn.col;
+    vOut.frag.uv = vIn.uv;
     return vOut;
 }
 
 [shader("fragment")]
-float4 fragmentMain(PixelInput pIn)
+float4 fragmentMain(FragmentInput pIn: FragmentInput)
     : SV_Target
 {
-    return pIn.col * uniforms.texture.Sample(uniforms.sampler, pIn.uv);
+    return float4(1.0, 1.0, 1.0, 0.1);
+    return uniforms.texture.Sample(uniforms.sampler, pIn.uv);
 }

@@ -111,7 +111,8 @@ class ImguiAdapter:
 
     def register_texture(self, texture: spy.Texture) -> None:
         texture_id = texture.shared_handle.value
-        self._textures[texture_id] = texture
+        sampler = self.device.create_sampler()
+        self._textures[texture_id] = (texture, sampler)
 
     def unregister_texture(self, texture: spy.Texture) -> None:
         texture_id = texture.shared_handle.value
@@ -145,6 +146,21 @@ class ImguiAdapter:
         # Scale clip rects
         draw_data.scale_clip_rects(imgui.ImVec2(*self.io.display_framebuffer_scale))
 
+        # Clear frame buffer.
+        with command_encoder.begin_render_pass(
+            {
+                "color_attachments": [
+                    {
+                        "view": self.frame_buffer.create_view({}),
+                        "load_op": spy.LoadOp.clear,
+                        "store_op": spy.StoreOp.store,
+                        "clear_value": (0.0, 0.0, 0.0, 0.0),
+                    }
+                ]
+            }
+        ):
+            pass
+
         for commands in draw_data.cmd_lists:
             vtx_type = ctypes.c_byte * commands.vtx_buffer.size() * imgui.VERTEX_SIZE
             idx_type = ctypes.c_byte * commands.idx_buffer.size() * imgui.INDEX_SIZE
@@ -152,7 +168,7 @@ class ImguiAdapter:
             idx_arr = (idx_type).from_address(commands.idx_buffer.data_address())
             # Convert to numpy arrays.
             vtx_arr = np.frombuffer(vtx_arr, dtype=np.uint8)
-            idx_arr = np.frombuffer(idx_arr, dtype=np.uint32)
+            idx_arr = np.frombuffer(idx_arr, dtype=np.uint8)
             # Update vertex buffer.
             vertex_buffer = self.device.create_buffer(
                 usage=spy.BufferUsage.vertex_buffer | spy.BufferUsage.shader_resource,
@@ -167,9 +183,11 @@ class ImguiAdapter:
             )
 
             for command in commands.cmd_buffer:
-                texture = self._textures.get(command.texture_id)
-                if texture is None:
+                texture_sampler = self._textures.get(command.texture_id)
+                if texture_sampler is None:
                     raise ValueError("Texture not registered with ImguiAdapter.")
+
+                texture, sampler = texture_sampler
 
                 # Render ImGui draw data to the frame buffer.
                 with command_encoder.begin_render_pass(
@@ -187,6 +205,7 @@ class ImguiAdapter:
                     root_cursor = spy.ShaderCursor(root)
                     root_cursor["uniforms"]["proj"].write(proj_matrix)
                     root_cursor["uniforms"]["texture"].write(texture)
+                    root_cursor["uniforms"]["sampler"].write(sampler)
 
                     x, y, z, w = (
                         command.clip_rect.x,
@@ -237,7 +256,7 @@ class ImguiAdapter:
 
     def refresh_font_texture(self) -> None:
         """Method to refresh the font texture used by ImGui."""
-        texture_data = self.io.fonts.get_tex_data_as_rgba32()
+        texture_data = self.io.fonts.get_tex_data_as_rgba32()  # pyright: ignore
         width, height, _ = texture_data.shape
 
         if self._font_texture is not None:
@@ -248,7 +267,7 @@ class ImguiAdapter:
             format=spy.Format.rgba8_unorm,
             width=width,
             height=height,
-            usage=spy.TextureUsage.shader_resource,
+            usage=spy.TextureUsage.shader_resource | spy.TextureUsage.unordered_access,
             label="imgui_font_texture",
             data=texture_data,
         )
