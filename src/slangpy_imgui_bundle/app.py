@@ -1,6 +1,10 @@
+"""
+Application class for SlangPy ImGui Bundle.
+"""
+
 from pathlib import Path
 from typing import List, Sequence
-from imgui_bundle import imgui
+from imgui_bundle import imgui, implot3d
 import slangpy as spy
 from pyglm import glm
 
@@ -37,9 +41,12 @@ class App:
 
         # Setup renderer.
         imgui.create_context()
+        implot3d.create_context()
         self.io = imgui.get_io()
         self.io.set_ini_filename("")
         self.io.set_log_filename("")
+        # Enable docking.
+        self.io.config_flags |= imgui.ConfigFlags_.docking_enable.value
         self.adapter = ImguiAdapter(self.window, self.device)
 
         self.window.on_resize = self.on_resize
@@ -68,6 +75,9 @@ class App:
     def on_drop_files(self, file_paths: Sequence[str]) -> None:
         pass
 
+    def render(self, time: float, delta_time: float) -> None:
+        pass
+
     def run(self) -> None:
         while not self.window.should_close():
             # Poll events.
@@ -76,9 +86,8 @@ class App:
             imgui.new_frame()
 
             # Your application code here.
-            imgui.begin("Hello, SlangPy ImGui Bundle!")
-            imgui.text("This is a sample application using SlangPy ImGui Bundle.")
-            imgui.end()
+            imgui.show_demo_window()
+            implot3d.show_demo_window()
 
             imgui.render()
             # Render ImGui.

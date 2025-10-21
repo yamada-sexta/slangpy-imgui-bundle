@@ -50,12 +50,6 @@ class ImguiAdapter:
 
         # Create window surface.
         self.surface = self.device.create_surface(self.window)
-        self.surface.configure(width=self.window.width, height=self.window.height)
-
-        # Initialize render pipeline resources.
-        self.frame_buffer = self._create_frame_buffer(
-            self.window.width, self.window.height
-        )
 
         # Input layout.
         self.input_layout = self.device.create_input_layout(
@@ -277,7 +271,7 @@ class ImguiAdapter:
         self.io.fonts.tex_id = self._font_texture.shared_handle.value
         self.io.fonts.clear_tex_data()
 
-    def resize(self, width: int, height: int, fb_scale: float = 1) -> None:
+    def resize(self, width: int, height: int, fb_scale: float = 4) -> None:
         """Method to handle window resizing.
 
         :param width: The new width of the window.
@@ -289,8 +283,10 @@ class ImguiAdapter:
         # Update framebuffer scale.
         self.device.wait()
         if width > 0 and height > 0:
-            self.surface.configure(width, height)
-            self.frame_buffer = self._create_frame_buffer(width, height)
+            self.surface.configure(width * fb_scale, height * fb_scale)
+            self.frame_buffer = self._create_frame_buffer(
+                width * fb_scale, height * fb_scale
+            )
         else:
             self.surface.unconfigure()
 
