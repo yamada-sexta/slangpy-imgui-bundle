@@ -4,8 +4,17 @@ version = "0.1.0"
 description = "A slangpy renderer for ImGui Bundle."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "imgui-bundle>=1.92.4",
+    "pyglm>=2.8.2",
+    "slangpy>=0.37.0",
+]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "black>=25.9.0",
+]

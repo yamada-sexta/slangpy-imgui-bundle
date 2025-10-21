@@ -1,5 +1,5 @@
-def main():
-    print("Hello Slangpy ImGui Bundle!")
+from slangpy_imgui_bundle.app import App
 
 if __name__ == "__main__":
-    main()
+    app = App()
+    app.run()
