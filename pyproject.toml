@@ -5,7 +5,7 @@ description = "A slangpy renderer for ImGui Bundle."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "imgui-bundle>=1.92.4",
+    "imgui-bundle<=1.6.3",
     "pyglm>=2.8.2",
     "slangpy>=0.37.0",
 ]

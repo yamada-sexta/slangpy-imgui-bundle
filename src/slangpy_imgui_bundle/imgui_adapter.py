@@ -2,11 +2,11 @@
 Slangpy adapter for ImGui Bundle
 """
 
-from abc import ABC
 import ctypes
 import logging
 import slangpy as spy
-from imgui_bundle import ImVec2, imgui
+import numpy as np
+from imgui_bundle import imgui
 
 
 logger = logging.getLogger(__name__)
@@ -82,6 +82,14 @@ class ImguiAdapter:
             targets=[
                 {
                     "format": spy.Format.rgba16_float,
+                    "enable_blend": True,
+                    "color": spy.AspectBlendDesc(
+                        {
+                            "src_factor": spy.BlendFactor.src_alpha,
+                            "dst_factor": spy.BlendFactor.inv_src_alpha,
+                            "op": spy.BlendOp.add,
+                        }
+                    ),
                 }
             ],
         )
@@ -96,11 +104,11 @@ class ImguiAdapter:
         self.resize(self.window.width, self.window.height)
 
     def register_texture(self, texture: spy.Texture) -> None:
-        texture_id = texture.native_handle.value
+        texture_id = texture.shared_handle.value
         self._textures[texture_id] = texture
 
     def unregister_texture(self, texture: spy.Texture) -> None:
-        texture_id = texture.native_handle.value
+        texture_id = texture.shared_handle.value
         if texture_id in self._textures:
             del self._textures[texture_id]
 
@@ -119,40 +127,53 @@ class ImguiAdapter:
         width, height = self.io.display_size.x, self.io.display_size.y
         fb_w = int(width * self.io.display_framebuffer_scale.x)
         fb_h = int(height * self.io.display_framebuffer_scale.y)
-        proj_matrix = [
-            [2.0 / width, 0.0, 0.0, 0.0],
-            [0.0, -2.0 / height, 0.0, 0.0],
-            [0.0, 0.0, -1.0, 0.0],
-            [-1.0, 1.0, 0.0, 1.0],
-        ]
+        proj_matrix = np.array(
+            [
+                [2.0 / width, 0.0, 0.0, 0.0],
+                [0.0, -2.0 / height, 0.0, 0.0],
+                [0.0, 0.0, -1.0, 0.0],
+                [-1.0, 1.0, 0.0, 1.0],
+            ]
+        )
 
         for commands in draw_data.cmd_lists:
             vtx_type = ctypes.c_byte * commands.vtx_buffer.size() * imgui.VERTEX_SIZE
             idx_type = ctypes.c_uint32 * commands.idx_buffer.size() * imgui.INDEX_SIZE
             vtx_arr = (vtx_type).from_address(commands.vtx_buffer.data_address())
             idx_arr = (idx_type).from_address(commands.idx_buffer.data_address())
+            # Convert to numpy arrays.
+            vtx_arr = np.frombuffer(vtx_arr, dtype=np.uint8)
+            idx_arr = np.frombuffer(idx_arr, dtype=np.uint32)
             # Update vertex buffer.
             vertex_buffer = self.device.create_buffer(
                 usage=spy.BufferUsage.vertex_buffer | spy.BufferUsage.shader_resource,
                 label="imgui_vertex_buffer",
-                data=bytes(vtx_arr),
+                data=vtx_arr,
             )
             # Update index buffer.
             index_buffer = self.device.create_buffer(
                 usage=spy.BufferUsage.index_buffer | spy.BufferUsage.shader_resource,
                 label="imgui_index_buffer",
-                data=bytes(idx_arr),
+                data=idx_arr,
             )
 
             idx_offset = 0
             for command in commands.cmd_buffer:
-                texture = self._textures.get(command.get_tex_id())
+                texture = self._textures.get(command.texture_id)
                 if texture is None:
                     raise ValueError("Texture not registered with ImguiAdapter.")
 
                 # Render ImGui draw data to the frame buffer.
                 with command_encoder.begin_render_pass(
-                    {"color_attachments": [{"view": self.frame_buffer.create_view({})}]}
+                    {
+                        "color_attachments": [
+                            {
+                                "view": self.frame_buffer.create_view({}),
+                                "load_op": spy.LoadOp.load,
+                                "store_op": spy.StoreOp.store,
+                            }
+                        ]
+                    }
                 ) as pass_encoder:
                     root = pass_encoder.bind_pipeline(self.pipeline)
                     root_cursor = spy.ShaderCursor(root)
@@ -205,22 +226,23 @@ class ImguiAdapter:
 
     def refresh_font_texture(self) -> None:
         """Method to refresh the font texture used by ImGui."""
-        texture_data = self.io.fonts.tex_data.get_pixels_array()
-        width, height = texture_data.shape
+        texture_data = self.io.fonts.get_tex_data_as_rgba32()
+        width, height, _ = texture_data.shape
 
         if self._font_texture is not None:
             self.unregister_texture(self._font_texture)
 
         self._font_texture = self.device.create_texture(
+            type=spy.TextureType.texture_2d,
             format=spy.Format.r8_unorm,
             width=width,
             height=height,
             usage=spy.TextureUsage.shader_resource,
             label="imgui_font_texture",
-            data=texture_data.tobytes(),
+            data=texture_data,
         )
         self.register_texture(self._font_texture)
-        self.io.fonts.tex_data.tex_id = self._font_texture.native_handle.value
+        self.io.fonts.tex_id = self._font_texture.shared_handle.value
         self.io.fonts.clear_tex_data()
 
     def resize(self, width: int, height: int, fb_scale: float = 1) -> None:
@@ -230,8 +252,8 @@ class ImguiAdapter:
         :param height: The new height of the window.
         """
         # Update ImGui display size.
-        self.io.display_size = ImVec2(width, height)
-        self.io.display_framebuffer_scale = ImVec2(fb_scale, fb_scale)
+        self.io.display_size = imgui.ImVec2(width, height)
+        self.io.display_framebuffer_scale = imgui.ImVec2(fb_scale, fb_scale)
         # Update framebuffer scale.
         self.device.wait()
         if width > 0 and height > 0:
@@ -258,7 +280,7 @@ class ImguiAdapter:
         """
         # Mouse move event.
         if event.is_move():
-            self.io.mouse_pos = ImVec2(*event.pos)
+            self.io.mouse_pos = imgui.ImVec2(*event.pos)
         if event.is_button_down() or event.is_button_up():
             down = event.is_button_down()
             if event.button == spy.MouseButton.left:

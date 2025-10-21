@@ -5,7 +5,7 @@ import slangpy as spy
 from pyglm import glm
 
 import slangpy_imgui_bundle
-from slangpy_imgui_bundle.imgui_bundle import ImguiAdapter
+from slangpy_imgui_bundle.imgui_adapter import ImguiAdapter
 
 
 class App:
@@ -36,6 +36,7 @@ class App:
         )
 
         # Setup renderer.
+        imgui.create_context()
         self.adapter = ImguiAdapter(self.window, self.device)
 
         self.window.on_resize = self.on_resize
@@ -72,7 +73,10 @@ class App:
             imgui.new_frame()
 
             # Your application code here.
+            imgui.begin("Hello, SlangPy ImGui Bundle!")
+            imgui.text("This is a sample application using SlangPy ImGui Bundle.")
+            imgui.end()
 
-            imgui.end_frame()
+            imgui.render()
             # Render ImGui.
             self.adapter.render(imgui.get_draw_data())
