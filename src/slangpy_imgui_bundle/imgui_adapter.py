@@ -69,11 +69,13 @@ class ImguiAdapter:
                     "semantic_name": "TEXCOORD",
                     "semantic_index": 0,
                     "format": spy.Format.rg32_float,
+                    "offset": 8,
                 },
                 {
                     "semantic_name": "COLOR",
                     "semantic_index": 0,
                     "format": spy.Format.rgba8_unorm,
+                    "offset": 16,
                 },
             ],
             vertex_streams=[{"stride": 20}],
@@ -168,7 +170,7 @@ class ImguiAdapter:
             idx_arr = (idx_type).from_address(commands.idx_buffer.data_address())
             # Convert to numpy arrays.
             vtx_arr = np.frombuffer(vtx_arr, dtype=np.uint8)
-            idx_arr = np.frombuffer(idx_arr, dtype=np.uint8)
+            idx_arr = np.frombuffer(idx_arr, dtype=np.uint32)
             # Update vertex buffer.
             vertex_buffer = self.device.create_buffer(
                 usage=spy.BufferUsage.vertex_buffer | spy.BufferUsage.shader_resource,
@@ -240,7 +242,7 @@ class ImguiAdapter:
                             ),
                         }
                     )
-                    pass_encoder.draw(
+                    pass_encoder.draw_indexed(
                         {
                             "vertex_count": command.elem_count,
                             "start_index_location": command.idx_offset,
@@ -257,7 +259,7 @@ class ImguiAdapter:
     def refresh_font_texture(self) -> None:
         """Method to refresh the font texture used by ImGui."""
         texture_data = self.io.fonts.get_tex_data_as_rgba32()  # pyright: ignore
-        width, height, _ = texture_data.shape
+        height, width, _ = texture_data.shape
 
         if self._font_texture is not None:
             self.unregister_texture(self._font_texture)

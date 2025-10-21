@@ -40,6 +40,5 @@ VertexOutput vertexMain(VertexInput vIn)
 float4 fragmentMain(FragmentInput pIn: FragmentInput)
     : SV_Target
 {
-    return float4(1.0, 1.0, 1.0, 0.1);
-    return uniforms.texture.Sample(uniforms.sampler, pIn.uv);
+    return pIn.col * uniforms.texture.Sample(uniforms.sampler, pIn.uv);
 }
