@@ -36,6 +36,12 @@ class ImguiAdapter:
     """
 
     def __init__(self, window: spy.Window, device: spy.Device) -> None:
+        if not imgui.get_current_context():
+            raise RuntimeError(
+                "No valid ImGui context. Use imgui.create_context() first and/or "
+                "imgui.set_current_context()."
+            )
+
         # Registered textures.
         self._textures = {}
 
@@ -129,16 +135,19 @@ class ImguiAdapter:
         fb_h = int(height * self.io.display_framebuffer_scale.y)
         proj_matrix = np.array(
             [
-                [2.0 / width, 0.0, 0.0, 0.0],
-                [0.0, -2.0 / height, 0.0, 0.0],
+                [2.0 / width, 0.0, 0.0, -1.0],
+                [0.0, -2.0 / height, 0.0, 1.0],
                 [0.0, 0.0, -1.0, 0.0],
-                [-1.0, 1.0, 0.0, 1.0],
+                [0.0, 0.0, 0.0, 1.0],
             ]
         )
 
+        # Scale clip rects
+        draw_data.scale_clip_rects(imgui.ImVec2(*self.io.display_framebuffer_scale))
+
         for commands in draw_data.cmd_lists:
             vtx_type = ctypes.c_byte * commands.vtx_buffer.size() * imgui.VERTEX_SIZE
-            idx_type = ctypes.c_uint32 * commands.idx_buffer.size() * imgui.INDEX_SIZE
+            idx_type = ctypes.c_byte * commands.idx_buffer.size() * imgui.INDEX_SIZE
             vtx_arr = (vtx_type).from_address(commands.vtx_buffer.data_address())
             idx_arr = (idx_type).from_address(commands.idx_buffer.data_address())
             # Convert to numpy arrays.
@@ -157,7 +166,6 @@ class ImguiAdapter:
                 data=idx_arr,
             )
 
-            idx_offset = 0
             for command in commands.cmd_buffer:
                 texture = self._textures.get(command.texture_id)
                 if texture is None:
@@ -177,7 +185,7 @@ class ImguiAdapter:
                 ) as pass_encoder:
                     root = pass_encoder.bind_pipeline(self.pipeline)
                     root_cursor = spy.ShaderCursor(root)
-                    root_cursor["uniforms"]["proj"].set_data(proj_matrix)
+                    root_cursor["uniforms"]["proj"].write(proj_matrix)
                     root_cursor["uniforms"]["texture"].write(texture)
 
                     x, y, z, w = (
@@ -206,16 +214,19 @@ class ImguiAdapter:
                             ],
                             "vertex_buffers": [vertex_buffer],
                             "index_buffer": index_buffer,
-                            "index_format": spy.IndexFormat.uint32,
+                            "index_format": (
+                                spy.IndexFormat.uint16
+                                if imgui.INDEX_SIZE == 2
+                                else spy.IndexFormat.uint32
+                            ),
                         }
                     )
                     pass_encoder.draw(
                         {
                             "vertex_count": command.elem_count,
-                            "start_index_location": idx_offset,
+                            "start_index_location": command.idx_offset,
                         }
                     )
-                    idx_offset += command.elem_count
 
         # Blit to the surface texture.
         command_encoder.blit(surface_texture, self.frame_buffer)
@@ -234,7 +245,7 @@ class ImguiAdapter:
 
         self._font_texture = self.device.create_texture(
             type=spy.TextureType.texture_2d,
-            format=spy.Format.r8_unorm,
+            format=spy.Format.rgba8_unorm,
             width=width,
             height=height,
             usage=spy.TextureUsage.shader_resource,
@@ -309,6 +320,8 @@ class ImguiAdapter:
             format=spy.Format.rgba16_float,
             width=width,
             height=height,
-            usage=spy.TextureUsage.shader_resource | spy.TextureUsage.unordered_access,
+            usage=spy.TextureUsage.render_target
+            | spy.TextureUsage.shader_resource
+            | spy.TextureUsage.unordered_access,
             label="output_texture",
         )
